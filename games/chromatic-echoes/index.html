@@ -157,7 +157,7 @@
     
     <!-- מידע משתמש ושמירה -->
     <div id="progressContainer">
-        <div id="userIdDisplay">טוען משתמש...</div>
+        <div id="userIdDisplay">משתמש מקומי</div>
     </div>
 
     <!-- מיכל המשחק -->
@@ -180,28 +180,12 @@
             <li><span class="text-sm font-bold">שליטה (נייד/דסקטופ):</span> לחץ/הקש במקום כלשהו על המסך כדי <span class="color-red">לשנות צבע</span> של הליבה.</li>
             <li><span class="text-sm font-bold">לכידה:</span> הליבה תופסת הד רק אם הקרן פוגעת בו וצבע הליבה זהה לצבע ההד.</li>
             <li><span class="text-sm font-bold">שרשרת:</span> הד שנלכד משנה את צבע כל ההדים הסמוכים לצבע הליבה הנוכחי – השתמש בזה כדי ליצור שרשראות!</li>
-            <li><span class="text-sm font-bold text-yellow-400">שמירת התקדמות:</span> השלב והניקוד שלך נשמרים אוטומטית בענן.</li>
+            <li><span class="text-sm font-bold text-yellow-400">שמירת התקדמות:</span> השלב והניקוד נשמרים בדפדפן (localStorage).</li>
         </ul>
     </div>
 
     <script type="module">
-        // ייבוא Firebase
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        // הגדרות גלובליות ומשתנים של Firebase
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        let db = null;
-        let auth = null;
-        let userId = null;
-        let isAuthReady = false;
-
-        const USER_PROGRESS_COLLECTION = 'game_progress';
-        const USER_PROGRESS_DOC_ID = 'progress';
+        // גרסה ללא Firebase - שומר/טוען מקומית ב-localStorage כדי לא לחסום את המשחק
 
         // --- רכיבי DOM ---
         const canvas = document.getElementById('gameCanvas');
@@ -215,7 +199,7 @@
         const timerDisplay = document.getElementById('timerDisplay');
         const currentCoreColorDisplay = document.getElementById('currentCoreColor');
         const userIdDisplay = document.getElementById('userIdDisplay');
-        
+
         // --- הגדרות המשחק ---
         const COLORS = {
             R: { hex: '#FF5733', name: 'אדום' },
@@ -241,11 +225,9 @@
         let echoes = [];
         let pulses = [];
 
-        // --- מחלקות המשחק (הושלמו) ---
-        
-        /**
-         * הליבה המרכזית (השחקן)
-         */
+        const LOCAL_STORAGE_KEY = 'chromatic-echoes-progress';
+
+        // --- מחלקות המשחק ---
         class Core {
             constructor() {
                 this.x = canvas.width / 2;
@@ -257,14 +239,12 @@
                 this.rotationSpeed = 0.03; // מהירות סיבוב
             }
 
-            // מחליף את צבע הליבה
             changeColor() {
                 this.colorIndex = (this.colorIndex + 1) % COLOR_KEYS.length;
                 this.colorKey = COLOR_KEYS[this.colorIndex];
                 this.updateDisplay();
             }
 
-            // מעדכן את תצוגת הצבע ב-UI
             updateDisplay() {
                  currentCoreColorDisplay.textContent = COLORS[this.colorKey].name;
                  currentCoreColorDisplay.style.color = COLORS[this.colorKey].hex;
@@ -274,32 +254,27 @@
 
             draw() {
                 const currentColor = COLORS[this.colorKey].hex;
-                
-                // 1. ציור הקרן המסתובבת
+
                 ctx.save();
                 ctx.translate(this.x, this.y);
                 ctx.rotate(this.angle);
-                
-                // ציור הקו
+
                 ctx.strokeStyle = currentColor;
                 ctx.lineWidth = 2;
                 ctx.shadowBlur = 10;
                 ctx.shadowColor = currentColor;
                 ctx.beginPath();
                 ctx.moveTo(0, 0);
-                // FIX: הארכת הקרן לכל רוחב הקנבס כדי להגיע לפינות
-                ctx.lineTo(canvas.width, 0); 
+                ctx.lineTo(canvas.width, 0);
                 ctx.stroke();
 
                 ctx.restore();
 
-                // 2. ציור הליבה
                 ctx.fillStyle = currentColor;
                 ctx.shadowBlur = 15;
                 ctx.shadowColor = currentColor;
                 ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
-                
-                // ציור גבול לבן קטן
+
                 ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 1;
                 ctx.shadowBlur = 0;
@@ -311,17 +286,14 @@
             }
         }
 
-        /**
-         * הד (המטרה)
-         */
         class Echo {
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
                 this.radius = 12;
                 this.colorKey = this.getRandomColorKey();
-                this.changeTimer = 0; // מונה מתי לשנות צבע
-                this.changeInterval = 1000 + Math.random() * 500; // ms
+                this.changeTimer = 0;
+                this.changeInterval = 1000 + Math.random() * 500;
                 this.isAlive = true;
             }
 
@@ -332,15 +304,13 @@
 
             draw() {
                 const currentColor = COLORS[this.colorKey].hex;
-                
                 ctx.fillStyle = currentColor;
                 ctx.shadowBlur = 8;
                 ctx.shadowColor = currentColor;
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
                 ctx.fill();
-                
-                // גבול שחור פנימי
+
                 ctx.strokeStyle = '#000';
                 ctx.lineWidth = 2;
                 ctx.shadowBlur = 0;
@@ -354,41 +324,37 @@
                     this.changeTimer = 0;
                 }
             }
-            
-            // שינוי צבע עקב גל אנרגיה (Pulse)
+
             convertColor(newColorKey) {
                 this.colorKey = newColorKey;
-                this.changeTimer = 0; // איפוס טיימר הצבע לאחר המרה
+                this.changeTimer = 0;
             }
         }
 
-        /**
-         * גל אנרגיה כרומטי (אפקט)
-         */
         class Pulse {
             constructor(x, y, colorKey) {
                 this.x = x;
                 this.y = y;
                 this.color = COLORS[colorKey].hex;
-                this.maxRadius = 150; 
+                this.maxRadius = 150;
                 this.currentRadius = 0;
-                this.speed = 4; // מהירות התפשטות
+                this.speed = 4;
                 this.isAlive = true;
             }
 
             draw() {
-                const alpha = 1 - (this.currentRadius / this.maxRadius); // דעיכת שקיפות
+                const alpha = 1 - (this.currentRadius / this.maxRadius);
                 ctx.strokeStyle = this.color;
                 ctx.lineWidth = 3;
                 ctx.shadowBlur = 10;
                 ctx.shadowColor = this.color;
                 ctx.globalAlpha = alpha;
-                
+
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.currentRadius, 0, Math.PI * 2);
                 ctx.stroke();
 
-                ctx.globalAlpha = 1; // איפוס שקיפות
+                ctx.globalAlpha = 1;
                 ctx.shadowBlur = 0;
             }
 
@@ -399,376 +365,186 @@
                 }
             }
         }
-        
-        // --- לוגיקת Firebase ושמירת התקדמות ---
-        
-        /**
-         * בונה הפנייה למסמך ההתקדמות של המשתמש הנוכחי
-         */
-        function getUserDocRef() {
-            if (!db || !userId) {
-                console.error("Firebase or userId not initialized.");
-                return null;
-            }
-            // Path: /artifacts/{appId}/users/{userId}/game_progress/progress
-            return doc(db, 'artifacts', appId, 'users', userId, USER_PROGRESS_COLLECTION, USER_PROGRESS_DOC_ID);
-        }
 
-        /**
-         * טוען את ההתקדמות השמורה של המשתמש
-         */
-        async function loadProgress() {
-            if (!isAuthReady || !userId) {
-                console.warn("Auth not ready or user ID missing. Cannot load progress.");
-                // אם האימות לא מוכן, התחל מצב ברירת מחדל (ויש להציג את מסך ההתחלה)
+        // --- שמירת התקדמות מקומית (localStorage) ---
+        function loadProgress() {
+            try {
+                const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (!raw) {
+                    initGameState(0, 1);
+                    showWelcomeScreen();
+                    return;
+                }
+
+                const data = JSON.parse(raw);
+                initGameState(data.score || 0, data.level || 1);
+                game.timeLimit = data.timeLimit || DEFAULT_TIME_LIMIT;
+                game.timeLeft = game.timeLimit + (game.level - 1) * 5;
+
+                showMessage('התקדמות נטענה', `המשך משלב ${game.level} עם ניקוד ${game.score}.`, 'המשך לשחק', startGameAfterLoad);
+            } catch (e) {
+                console.error('Failed to load progress from localStorage', e);
                 initGameState(0, 1);
                 showWelcomeScreen();
-                return;
             }
+        }
 
+        function saveProgress() {
             try {
-                const docRef = getUserDocRef();
-                const docSnap = await getDoc(docRef);
-
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    console.log("Progress loaded:", data);
-                    
-                    // עדכון מצב המשחק מה-Firestore
-                    initGameState(data.score || 0, data.level || 1);
-                    game.timeLimit = data.timeLimit || DEFAULT_TIME_LIMIT; 
-                    game.timeLeft = game.timeLimit + (game.level - 1) * 5;
-
-                    showMessage(
-                        'התקדמות נטענה', 
-                        `המשך משלב ${game.level} עם ניקוד ${game.score}.`, 
-                        'המשך לשחק', 
-                        startGameAfterLoad
-                    );
-                    return;
-
-                } else {
-                    console.log("No saved progress found. Starting new game.");
-                }
+                const progressData = {
+                    score: game.score,
+                    level: game.level,
+                    timeLimit: game.timeLimit,
+                    lastPlayed: new Date().toISOString()
+                };
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(progressData));
+                console.log('Progress saved locally:', progressData);
             } catch (e) {
-                console.error("Error loading progress:", e);
-            }
-            
-            // אם אין התקדמות שמורה או אם יש שגיאה, הצג מסך התחלה
-            initGameState(0, 1);
-            showWelcomeScreen();
-        }
-        
-        /**
-         * מציג את מסך קבלת הפנים להתחלת משחק חדש
-         */
-        function showWelcomeScreen() {
-             showMessage(
-                'ברוך הבא', 
-                'לחץ על הכפתור כדי להתחיל משחק חדש.', 
-                'התחל', 
-                startGameAfterLoad
-            );
-        }
-
-        /**
-         * שומר את מצב המשחק הנוכחי
-         */
-        async function saveProgress() {
-            if (!isAuthReady || !userId || !db) {
-                console.warn("Cannot save: Auth not ready or DB not initialized.");
-                return;
-            }
-
-            const progressData = {
-                score: game.score,
-                level: game.level,
-                timeLimit: game.timeLimit,
-                lastPlayed: new Date().toISOString()
-            };
-
-            try {
-                const docRef = getUserDocRef();
-                // שימוש ב-setDoc עם merge כדי ליצור את המסמך אם אינו קיים
-                await setDoc(docRef, progressData, { merge: true });
-                console.log("Progress saved successfully:", progressData);
-            } catch (e) {
-                console.error("Error saving progress:", e);
+                console.error('Failed to save progress to localStorage', e);
             }
         }
-        
-        /**
-         * אתחול Firebase והזדהות
-         */
-        async function initializeFirebaseAndAuth() {
-            setLogLevel('debug');
-            if (Object.keys(firebaseConfig).length === 0) {
-                console.error("Firebase config is missing or invalid.");
-                userIdDisplay.textContent = "שגיאת Firebase: חסר הגדרות.";
-                return;
-            }
-
-            try {
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                
-                // כניסה באמצעות custom token או אנונימית
-                const authPromise = initialAuthToken 
-                    ? signInWithCustomToken(auth, initialAuthToken)
-                    : signInAnonymously(auth);
-                    
-                await authPromise;
-
-
-                // ודא שהמשתמש מחובר
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        isAuthReady = true;
-                        userIdDisplay.textContent = `משתמש: ${userId}`;
-                        console.log("User Authenticated:", userId);
-                    } else {
-                        // אם המשתמש התנתק, נשתמש ב-ID זמני.
-                        userId = crypto.randomUUID(); 
-                        isAuthReady = true;
-                        userIdDisplay.textContent = `מזהה זמני: ${userId}`;
-                        console.log("User Anonymous/Unauthenticated. Using fallback ID.");
-                    }
-                    
-                    // לאחר האימות, טען את ההתקדמות השמורה (פעם אחת)
-                    loadProgress();
-                });
-
-            } catch (e) {
-                console.error("Firebase Auth Error:", e);
-                userIdDisplay.textContent = "שגיאת הזדהות.";
-            }
-        }
-
 
         // --- פונקציות לוגיקה ---
-
-        /**
-         * אתחול גודל הקנבס והמשחק
-         */
         function resizeCanvas() {
             const container = document.getElementById('gameContainer');
-            // הגדרת גודל ריבועי המבוסס על הרוחב הזמין (מקסימום 500px)
-            const newSize = Math.min(container.clientWidth, 500); 
-            
+            const newSize = Math.min(container.clientWidth, 500);
             canvas.width = newSize;
             canvas.height = newSize;
 
             if (core) {
-                // מרכז את הליבה מחדש לאחר שינוי גודל
                 core.x = canvas.width / 2;
                 core.y = canvas.height / 2;
             }
         }
 
-        /**
-         * טוען את השלב הנוכחי (מייצר הדים חדשים)
-         */
         function loadLevel() {
             echoes = [];
             pulses = [];
-            // חישוב זמן חדש בהתאם לשלב ול-TimeLimit שנשמר
-            game.timeLeft = game.timeLimit + (game.level - 1) * 5; 
-            
+            game.timeLeft = game.timeLimit + (game.level - 1) * 5;
+
             const numEchoes = 10 + game.level * 2;
-            
+
             for (let i = 0; i < numEchoes; i++) {
                 let x, y;
-                // מנסה למצוא מיקום רנדומלי שאינו קרוב מדי לליבה (רדיוס 100)
                 do {
                     x = Math.random() * (canvas.width - 60) + 30;
                     y = Math.random() * (canvas.height - 60) + 30;
-                } while (Math.hypot(x - core.x, y - core.y) < 100); 
+                } while (Math.hypot(x - core.x, y - core.y) < 100);
 
                 echoes.push(new Echo(x, y));
             }
-            
+
             levelDisplay.textContent = `שלב: ${game.level}`;
             updateUI();
         }
 
-        /**
-         * בדיקת פגיעה של הקרן בהד
-         */
         function checkBeamHit() {
-            // חישוב הקואורדינטות של הקרן (מהמרכז החוצה)
             const cos = Math.cos(core.angle);
             const sin = Math.sin(core.angle);
 
             for (let i = echoes.length - 1; i >= 0; i--) {
                 const echo = echoes[i];
-                
-                // וקטור מהמרכז להד
                 const dx = echo.x - core.x;
                 const dy = echo.y - core.y;
-
-                // הטלת ההד על הקרן (בדיקה אם הוא נמצא על הקו)
                 const projectedDistance = dx * cos + dy * sin;
                 const perpendicularDistance = dx * sin - dy * cos;
-                
-                // מרחק מהציר המסתובב (הקו) - חייב להיות בתוך רדיוס ההד
+
                 if (Math.abs(perpendicularDistance) < echo.radius) {
-                    // ודא שההד נמצא בכיוון הקרן (לא מאחוריה)
-                    // FIX: בדיקת אורך הקרן השתנתה ל-canvas.width כדי להתאים ל-draw()
                     if (projectedDistance > 0 && projectedDistance < canvas.width) {
-                        
-                        // פגיעה: כעת בודקים התאמת צבעים
                         if (echo.colorKey === core.colorKey) {
-                            // *** לכידה מוצלחת ***
                             game.score += 10 + game.level * 2;
-                            
-                            // יצירת גל אנרגיה כרומטי
                             pulses.push(new Pulse(echo.x, echo.y, core.colorKey));
-                            
-                            // הסרת ההד שנלכד
                             echo.isAlive = false;
                             echoes.splice(i, 1);
-                            
-                            // בדיקת סיום שלב
                             if (echoes.length === 0) {
                                 nextLevel();
                             }
-                            break; 
+                            break;
                         }
                     }
                 }
             }
         }
 
-        /**
-         * בדיקת השפעת גלי אנרגיה על הדים אחרים (תגובת שרשרת)
-         */
         function checkPulseEffect() {
             for (let i = pulses.length - 1; i >= 0; i--) {
                 const pulse = pulses[i];
-
-                // רק גל קיים יכול להשפ��ע
                 if (!pulse.isAlive) continue;
 
                 for (let j = 0; j < echoes.length; j++) {
                     const echo = echoes[j];
-                    
                     const dx = pulse.x - echo.x;
                     const dy = pulse.y - echo.y;
                     const distance = Math.hypot(dx, dy);
 
-                    // אם הגל חצה את ההד
                     if (pulse.currentRadius > distance && pulse.currentRadius - pulse.speed <= distance) {
-                         // שינוי צבע ההד
-                         if (echo.colorKey !== core.colorKey) {
-                             echo.convertColor(core.colorKey);
-                             // אפשר להוסיף ניקוד קטן על המרת צבע (כדי לעודד שרשראות)
-                             game.score += 1; 
-                         }
+                        if (echo.colorKey !== core.colorKey) {
+                            echo.convertColor(core.colorKey);
+                            game.score += 1;
+                        }
                     }
                 }
             }
         }
 
-        /**
-         * מעבר לשלב הבא
-         */
         function nextLevel() {
             game.level++;
-            saveProgress(); // שמירת התקדמות
-            showMessage(
-                'שלב הושלם!', 
-                `עברת לשלב ${game.level}! הניקוד נשמר.`, 
-                'המשך לשלב הבא', 
-                startGameAfterLoad
-            );
+            saveProgress();
+            showMessage('שלב הושלם!', `עברת לשלב ${game.level}! הניקוד נשמר.`, 'המשך לשלב הבא', startGameAfterLoad);
         }
 
-        /**
-         * סיום המשחק
-         */
         function gameOver() {
             game.active = false;
             clearInterval(game.timerIntervalId);
-            saveProgress(); // שמירת התקדמות
-            showMessage(
-                'המשחק נגמר!', 
-                `הניקוד הסופי שלך: ${game.score}.`, 
-                'התחל משחק חדש', 
-                resetAndStartNewGame
-            );
+            saveProgress();
+            showMessage('המשחק נגמר!', `הניקוד הסופי שלך: ${game.score}.`, 'התחל משחק חדש', resetAndStartNewGame);
         }
-        
-        /**
-         * איפוס והתחלת משחק חדש מהתחלה
-         */
+
         function resetAndStartNewGame() {
             initGameState(0, 1);
             loadLevel();
             startGameAfterLoad();
         }
 
-
-        /**
-         * עדכון המשחק (לוגיקה)
-         */
         function update() {
             if (!game.active) return;
 
             const now = Date.now();
-            // הגבלת deltaTime כדי למנוע קפיצות במשחקים איטיים
-            const deltaTime = Math.min(now - game.lastUpdateTime, 100); 
+            const deltaTime = Math.min(now - game.lastUpdateTime, 100);
 
             core.update();
             echoes.forEach(e => e.update(deltaTime));
             pulses.forEach(p => p.update());
 
-            // בדיקת פגיעת קרן (לכידה)
             checkBeamHit();
-            
-            // בדיקת השפעת גל אנרגיה (שרשרת)
             checkPulseEffect();
 
-            // ניקוי גלי אנרגיה והדים לא קיימים
             pulses = pulses.filter(p => p.isAlive);
             echoes = echoes.filter(e => e.isAlive);
-            
+
             game.lastUpdateTime = now;
         }
 
-        /**
-         * ציור המשחק
-         */
         function draw() {
             ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height); // ניקוי המסך
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             pulses.forEach(p => p.draw());
             echoes.forEach(e => e.draw());
             core.draw();
         }
 
-        /**
-         * לולאת המשחק הראשית
-         */
         function gameLoop() {
             game.animationFrameId = requestAnimationFrame(gameLoop);
             update();
             draw();
         }
 
-        /**
-         * עדכון ה-UI
-         */
         function updateUI() {
             scoreDisplay.textContent = `ניקוד: ${game.score}`;
             timerDisplay.textContent = `זמן: ${Math.max(0, game.timeLeft)}`;
         }
-        
-        /**
-         * טיימר המשחק
-         */
+
         function startTimer() {
             if (game.timerIntervalId) clearInterval(game.timerIntervalId);
             game.timerIntervalId = setInterval(() => {
@@ -778,117 +554,90 @@
                 }
                 game.timeLeft--;
                 updateUI();
-                
+
                 if (game.timeLeft <= 0) {
                     gameOver();
                 }
             }, 1000);
         }
 
-        /**
-         * הצגת מסך הודעה (סיום, התחלה, מעבר שלב)
-         */
         function showMessage(title, text, buttonText, action) {
-            // עצור את לולאת המשחק אם היא פועלת
             if (game.animationFrameId) {
                 cancelAnimationFrame(game.animationFrameId);
                 game.animationFrameId = null;
             }
             if (game.timerIntervalId) {
-                 clearInterval(game.timerIntervalId); 
-                 game.timerIntervalId = null;
+                clearInterval(game.timerIntervalId);
+                game.timerIntervalId = null;
             }
 
             messageTitle.textContent = title;
             messageTitle.style.color = (title === 'המשחק נגמר!') ? COLORS.R.hex : COLORS.G.hex;
             messageText.textContent = text;
             startButton.textContent = buttonText;
-            
+
             startButton.onclick = () => {
                 messageScreen.style.display = 'none';
                 action();
             };
-            
+
             messageScreen.style.display = 'flex';
         }
 
-
-        // --- טיפול בקלט ---
-
-        /**
-         * טיפול בלחיצה/הקשה (משנה צבע ליבה)
-         */
         function handleInput(event) {
             if (!game.active || !core) return;
-            event.preventDefault(); // מונע גלילה בנייד
-
+            event.preventDefault();
             core.changeColor();
         }
 
-
-        // --- אתחול והתחלה ---
-        
-        /**
-         * מאתחל את מצב המשחק, אך לא מתחיל את הלולאה
-         */
         function initGameState(score, level) {
-            // איפוס מצב כללי
             if (game.animationFrameId) cancelAnimationFrame(game.animationFrameId);
             if (game.timerIntervalId) clearInterval(game.timerIntervalId);
-            game.active = false; 
+            game.active = false;
 
             resizeCanvas();
             game.score = score;
             game.level = level;
-            // יצירת ליבה חדשה
             core = new Core();
-            core.updateDisplay(); // הגדרת תצוגת הצבע הראשונית
+            core.updateDisplay();
             updateUI();
-            
-            // ציור ראשוני כדי להציג את הליבה
-            draw(); 
+            draw();
         }
-        
-        /**
-         * מתחיל את לולאת המשחק והטיימר לאחר טעינת שלב
-         */
+
         function startGameAfterLoad() {
             loadLevel();
             game.active = true;
             game.lastUpdateTime = Date.now();
-            
+
             startTimer();
             gameLoop();
         }
 
         // --- אירועים ---
-        
-        // אתחול גודל
         window.addEventListener('resize', resizeCanvas);
-        
-        // קלט: לחיצה/הקשה על הקנבס
         canvas.addEventListener('click', handleInput);
         canvas.addEventListener('touchstart', handleInput, { passive: false });
-        
-        // קלט: מקש רווח (Space) או מקש עכבר
         document.addEventListener('keydown', (e) => {
             if (e.code === 'Space' && game.active) {
                 handleInput(e);
             }
         });
-        
-        // הפעלת Firebase בפתיחת החלון
+
+        // הפעלה ראשונית - גרסה ללא Firebase
         window.onload = function() {
             resizeCanvas();
-            // הצגת מסך טעינה עד לסיום האימות
-            showMessage(
-                'טוען משתמש', 
-                'מתחבר למערכת שמירת ההתקדמות...', 
-                'המתן', 
-                () => {} // לא עושה כלום עד לסיום הטעינה
-            );
-            
-            initializeFirebaseAndAuth();
+            // יוצר מזהה משתמש מקומי אם צריך
+            try {
+                if (!localStorage.getItem('chromatic-echoes-user-id')) {
+                    localStorage.setItem('chromatic-echoes-user-id', crypto.randomUUID());
+                }
+                userIdDisplay.textContent = 'משתמש מקומי: ' + localStorage.getItem('chromatic-echoes-user-id');
+            } catch (e) {
+                userIdDisplay.textContent = 'משתמש מקומי';
+            }
+
+            // טען התקדמות מקומית והראה מסך התחלתי
+            loadProgress();
         };
 
     </script>
