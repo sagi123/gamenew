@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>הדי צבע (Chromatic Echoes)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* סגנונות בסיס וניאון */
         body {
-            background-color: #08081a; 
+            background-color: #08081a;
             color: #f0f0f0;
             font-family: 'Inter', sans-serif;
             display: flex;
@@ -22,7 +22,7 @@
 
         #gameContainer {
             background-color: #000000;
-            border: 3px solid #6c3aeb; /* סגול מרכזי */
+            border: 3px solid #6c3aeb;
             box-shadow: 0 0 20px rgba(108, 58, 235, 0.7);
             border-radius: 10px;
             overflow: hidden;
@@ -34,7 +34,7 @@
 
         canvas {
             display: block;
-            touch-action: none; 
+            touch-action: none;
         }
 
         #ui {
@@ -47,9 +47,9 @@
             margin-bottom: 10px;
             font-size: 1.1rem;
             font-weight: bold;
-            color: #33FF57; /* ירוק בהיר ל-UI */
+            color: #33FF57;
         }
-        
+
         .ui-item {
             padding: 5px 10px;
             border-radius: 5px;
@@ -64,14 +64,15 @@
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.9);
-            display: none; 
+            display: none;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            color: #ff0077; 
-            font-size: 1.5rem;
+            color: #ff0077;
+            font-size: 1.2rem;
             z-index: 10;
             text-align: center;
+            pointer-events: auto;
         }
 
         .game-button {
@@ -104,38 +105,16 @@
             text-align: right;
             font-size: 0.9rem;
         }
-        
-        /* צבעי הליבה */
+
         .color-red { color: #FF5733; }
         .color-green { color: #33FF57; }
         .color-blue { color: #3357FF; }
-
-        .core-display {
-            display: inline-block;
-            width: 15px;
-            height: 15px;
-            border-radius: 4px;
-            margin-right: 5px;
-            vertical-align: middle;
-        }
 
         #coreColorDisplay {
             text-align: center;
             font-size: 1.2rem;
             margin-top: 10px;
             margin-bottom: 10px;
-        }
-        
-        #progressContainer {
-            width: 100%;
-            max-width: 500px;
-            text-align: center;
-            font-size: 0.8rem;
-            color: #6c3aeb;
-            margin-top: 5px;
-            padding: 5px;
-            background: rgba(108, 58, 235, 0.1);
-            border-radius: 5px;
         }
     </style>
 </head>
@@ -149,26 +128,21 @@
         <div id="levelDisplay" class="ui-item">שלב: 1</div>
         <div id="timerDisplay" class="ui-item">זמן: 30</div>
     </div>
-    
+
     <!-- תצוגת צבע הליבה -->
     <div id="coreColorDisplay">
         צבע נוכחי: <span id="currentCoreColor" class="font-bold"></span>
     </div>
-    
-    <!-- מידע משתמש ושמירה -->
-    <div id="progressContainer">
-        <div id="userIdDisplay">משתמש מקומי</div>
-    </div>
 
     <!-- מיכל המשחק -->
     <div id="gameContainer">
-        <canvas id="gameCanvas"></canvas>
-        
+        <canvas id="gameCanvas" aria-label="משחק הדי צבע" role="img"></canvas>
+
         <!-- מסך הודעות (התחלה/סיום/מעבר שלב) -->
-        <div id="messageScreen">
+        <div id="messageScreen" aria-hidden="true">
             <h2 id="messageTitle" class="text-3xl mb-4 text-[#ff0077]">ברוך הבא</h2>
             <p id="messageText" class="text-lg mb-8 text-center px-4">לחץ על הכפתור כדי להתחיל.</p>
-            <button class="game-button" id="startButton">התחל</button>
+            <button class="game-button" id="startButton" type="button">התחל</button>
         </div>
     </div>
 
@@ -180,466 +154,432 @@
             <li><span class="text-sm font-bold">שליטה (נייד/דסקטופ):</span> לחץ/הקש במקום כלשהו על המסך כדי <span class="color-red">לשנות צבע</span> של הליבה.</li>
             <li><span class="text-sm font-bold">לכידה:</span> הליבה תופסת הד רק אם הקרן פוגעת בו וצבע הליבה זהה לצבע ההד.</li>
             <li><span class="text-sm font-bold">שרשרת:</span> הד שנלכד משנה את צבע כל ההדים הסמוכים לצבע הליבה הנוכחי – השתמש בזה כדי ליצור שרשראות!</li>
-            <li><span class="text-sm font-bold text-yellow-400">שמירת התקדמות:</span> השלב והניקוד נשמרים בדפדפן (localStorage).</li>
         </ul>
     </div>
 
     <script type="module">
-        // גרסה ללא Firebase - שומר/טוען מקומית ב-localStorage כדי לא לחסום את המשחק
+        // Defensive standalone version with detailed logs and robust startup.
+        (function () {
+            console.log('[Chromatic Echoes] booting...');
 
-        // --- רכיבי DOM ---
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const messageScreen = document.getElementById('messageScreen');
-        const messageTitle = document.getElementById('messageTitle');
-        const messageText = document.getElementById('messageText');
-        const startButton = document.getElementById('startButton');
-        const scoreDisplay = document.getElementById('scoreDisplay');
-        const levelDisplay = document.getElementById('levelDisplay');
-        const timerDisplay = document.getElementById('timerDisplay');
-        const currentCoreColorDisplay = document.getElementById('currentCoreColor');
-        const userIdDisplay = document.getElementById('userIdDisplay');
+            // --- DOM refs (with guards) ---
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas ? canvas.getContext('2d') : null;
+            const messageScreen = document.getElementById('messageScreen');
+            const messageTitle = document.getElementById('messageTitle');
+            const messageText = document.getElementById('messageText');
+            const startButton = document.getElementById('startButton');
+            const scoreDisplay = document.getElementById('scoreDisplay');
+            const levelDisplay = document.getElementById('levelDisplay');
+            const timerDisplay = document.getElementById('timerDisplay');
+            const currentCoreColorDisplay = document.getElementById('currentCoreColor');
 
-        // --- הגדרות המשחק ---
-        const COLORS = {
-            R: { hex: '#FF5733', name: 'אדום' },
-            G: { hex: '#33FF57', name: 'ירוק' },
-            B: { hex: '#3357FF', name: 'כחול' }
-        };
-        const COLOR_KEYS = ['R', 'G', 'B'];
-        const DEFAULT_TIME_LIMIT = 30;
-
-        let game = {
-            active: false,
-            score: 0,
-            level: 1,
-            timeLimit: DEFAULT_TIME_LIMIT,
-            timeLeft: DEFAULT_TIME_LIMIT,
-            animationFrameId: null,
-            timerIntervalId: null,
-            lastUpdateTime: Date.now()
-        };
-
-        // --- משתנים גלובליים של המשחק ---
-        let core;
-        let echoes = [];
-        let pulses = [];
-
-        const LOCAL_STORAGE_KEY = 'chromatic-echoes-progress';
-
-        // --- מחלקות המשחק ---
-        class Core {
-            constructor() {
-                this.x = canvas.width / 2;
-                this.y = canvas.height / 2;
-                this.size = 20;
-                this.colorIndex = 0;
-                this.colorKey = COLOR_KEYS[this.colorIndex];
-                this.angle = 0; // זווית הקרן המסתובבת
-                this.rotationSpeed = 0.03; // מהירות סיבוב
+            if (!canvas || !ctx || !startButton || !messageScreen) {
+                console.error('[Chromatic Echoes] fatal: required DOM elements missing. Aborting.');
+                if (messageText) messageText.textContent = 'שגיאה פנימית: אלמנטים חסרים. בדוק קונסול.';
+                return;
             }
 
-            changeColor() {
-                this.colorIndex = (this.colorIndex + 1) % COLOR_KEYS.length;
-                this.colorKey = COLOR_KEYS[this.colorIndex];
-                this.updateDisplay();
+            // --- game settings ---
+            const COLORS = {
+                R: { hex: '#FF5733', name: 'אדום' },
+                G: { hex: '#33FF57', name: 'ירוק' },
+                B: { hex: '#3357FF', name: 'כחול' }
+            };
+            const COLOR_KEYS = ['R', 'G', 'B'];
+            const DEFAULT_TIME_LIMIT = 30;
+
+            let game = {
+                active: false,
+                score: 0,
+                level: 1,
+                timeLimit: DEFAULT_TIME_LIMIT,
+                timeLeft: DEFAULT_TIME_LIMIT,
+                animationFrameId: null,
+                timerIntervalId: null,
+                lastUpdateTime: Date.now()
+            };
+
+            let core;
+            let echoes = [];
+            let pulses = [];
+
+            // keep current action for the single start button
+            let currentAction = null;
+
+            // --- classes ---
+            class Core {
+                constructor() {
+                    this.x = canvas.width / 2;
+                    this.y = canvas.height / 2;
+                    this.size = 20;
+                    this.colorIndex = 0;
+                    this.colorKey = COLOR_KEYS[this.colorIndex];
+                    this.angle = 0;
+                    this.rotationSpeed = 0.03;
+                }
+                changeColor() {
+                    this.colorIndex = (this.colorIndex + 1) % COLOR_KEYS.length;
+                    this.colorKey = COLOR_KEYS[this.colorIndex];
+                    this.updateDisplay();
+                }
+                updateDisplay() {
+                    if (!currentCoreColorDisplay) return;
+                    currentCoreColorDisplay.textContent = COLORS[this.colorKey].name;
+                    currentCoreColorDisplay.style.color = COLORS[this.colorKey].hex;
+                    currentCoreColorDisplay.classList.remove('color-red', 'color-green', 'color-blue');
+                    currentCoreColorDisplay.classList.add(`color-${this.colorKey.toLowerCase()}`);
+                }
+                draw() {
+                    const currentColor = COLORS[this.colorKey].hex;
+                    ctx.save();
+                    ctx.translate(this.x, this.y);
+                    ctx.rotate(this.angle);
+                    ctx.strokeStyle = currentColor;
+                    ctx.lineWidth = 2;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = currentColor;
+                    ctx.beginPath();
+                    // draw beam outwards: we draw to a large distance safely
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(Math.max(canvas.width, canvas.height), 0);
+                    ctx.stroke();
+                    ctx.restore();
+
+                    ctx.fillStyle = currentColor;
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = currentColor;
+                    ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1;
+                    ctx.shadowBlur = 0;
+                    ctx.strokeRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+                }
+                update() {
+                    this.angle += this.rotationSpeed;
+                }
             }
 
-            updateDisplay() {
-                 currentCoreColorDisplay.textContent = COLORS[this.colorKey].name;
-                 currentCoreColorDisplay.style.color = COLORS[this.colorKey].hex;
-                 currentCoreColorDisplay.classList.remove('color-red', 'color-green', 'color-blue');
-                 currentCoreColorDisplay.classList.add(`color-${this.colorKey.toLowerCase()}`);
-            }
-
-            draw() {
-                const currentColor = COLORS[this.colorKey].hex;
-
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.rotate(this.angle);
-
-                ctx.strokeStyle = currentColor;
-                ctx.lineWidth = 2;
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = currentColor;
-                ctx.beginPath();
-                ctx.moveTo(0, 0);
-                ctx.lineTo(canvas.width, 0);
-                ctx.stroke();
-
-                ctx.restore();
-
-                ctx.fillStyle = currentColor;
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = currentColor;
-                ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
-
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 1;
-                ctx.shadowBlur = 0;
-                ctx.strokeRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
-            }
-
-            update() {
-                this.angle += this.rotationSpeed;
-            }
-        }
-
-        class Echo {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.radius = 12;
-                this.colorKey = this.getRandomColorKey();
-                this.changeTimer = 0;
-                this.changeInterval = 1000 + Math.random() * 500;
-                this.isAlive = true;
-            }
-
-            getRandomColorKey() {
-                const index = Math.floor(Math.random() * COLOR_KEYS.length);
-                return COLOR_KEYS[index];
-            }
-
-            draw() {
-                const currentColor = COLORS[this.colorKey].hex;
-                ctx.fillStyle = currentColor;
-                ctx.shadowBlur = 8;
-                ctx.shadowColor = currentColor;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.strokeStyle = '#000';
-                ctx.lineWidth = 2;
-                ctx.shadowBlur = 0;
-                ctx.stroke();
-            }
-
-            update(deltaTime) {
-                this.changeTimer += deltaTime;
-                if (this.changeTimer > this.changeInterval) {
+            class Echo {
+                constructor(x, y) {
+                    this.x = x;
+                    this.y = y;
+                    this.radius = 12;
                     this.colorKey = this.getRandomColorKey();
+                    this.changeTimer = 0;
+                    this.changeInterval = 1000 + Math.random() * 500;
+                    this.isAlive = true;
+                }
+                getRandomColorKey() {
+                    return COLOR_KEYS[Math.floor(Math.random() * COLOR_KEYS.length)];
+                }
+                draw() {
+                    const currentColor = COLORS[this.colorKey].hex;
+                    ctx.fillStyle = currentColor;
+                    ctx.shadowBlur = 8;
+                    ctx.shadowColor = currentColor;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 2;
+                    ctx.shadowBlur = 0;
+                    ctx.stroke();
+                }
+                update(deltaTime) {
+                    this.changeTimer += deltaTime;
+                    if (this.changeTimer > this.changeInterval) {
+                        this.colorKey = this.getRandomColorKey();
+                        this.changeTimer = 0;
+                    }
+                }
+                convertColor(newColorKey) {
+                    this.colorKey = newColorKey;
                     this.changeTimer = 0;
                 }
             }
 
-            convertColor(newColorKey) {
-                this.colorKey = newColorKey;
-                this.changeTimer = 0;
-            }
-        }
-
-        class Pulse {
-            constructor(x, y, colorKey) {
-                this.x = x;
-                this.y = y;
-                this.color = COLORS[colorKey].hex;
-                this.maxRadius = 150;
-                this.currentRadius = 0;
-                this.speed = 4;
-                this.isAlive = true;
-            }
-
-            draw() {
-                const alpha = 1 - (this.currentRadius / this.maxRadius);
-                ctx.strokeStyle = this.color;
-                ctx.lineWidth = 3;
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = this.color;
-                ctx.globalAlpha = alpha;
-
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.currentRadius, 0, Math.PI * 2);
-                ctx.stroke();
-
-                ctx.globalAlpha = 1;
-                ctx.shadowBlur = 0;
-            }
-
-            update() {
-                this.currentRadius += this.speed;
-                if (this.currentRadius > this.maxRadius) {
-                    this.isAlive = false;
+            class Pulse {
+                constructor(x, y, colorKey) {
+                    this.x = x;
+                    this.y = y;
+                    this.color = COLORS[colorKey].hex;
+                    this.maxRadius = 150;
+                    this.currentRadius = 0;
+                    this.speed = 4;
+                    this.isAlive = true;
                 }
-            }
-        }
-
-        // --- שמירת התקדמות מקומית (localStorage) ---
-        function loadProgress() {
-            try {
-                const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-                if (!raw) {
-                    initGameState(0, 1);
-                    showWelcomeScreen();
-                    return;
+                draw() {
+                    const alpha = 1 - (this.currentRadius / this.maxRadius);
+                    ctx.strokeStyle = this.color;
+                    ctx.lineWidth = 3;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = this.color;
+                    ctx.globalAlpha = Math.max(0, alpha);
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.currentRadius, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                    ctx.shadowBlur = 0;
                 }
-
-                const data = JSON.parse(raw);
-                initGameState(data.score || 0, data.level || 1);
-                game.timeLimit = data.timeLimit || DEFAULT_TIME_LIMIT;
-                game.timeLeft = game.timeLimit + (game.level - 1) * 5;
-
-                showMessage('התקדמות נטענה', `המשך משלב ${game.level} עם ניקוד ${game.score}.`, 'המשך לשחק', startGameAfterLoad);
-            } catch (e) {
-                console.error('Failed to load progress from localStorage', e);
-                initGameState(0, 1);
-                showWelcomeScreen();
-            }
-        }
-
-        function saveProgress() {
-            try {
-                const progressData = {
-                    score: game.score,
-                    level: game.level,
-                    timeLimit: game.timeLimit,
-                    lastPlayed: new Date().toISOString()
-                };
-                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(progressData));
-                console.log('Progress saved locally:', progressData);
-            } catch (e) {
-                console.error('Failed to save progress to localStorage', e);
-            }
-        }
-
-        // --- פונקציות לוגיקה ---
-        function resizeCanvas() {
-            const container = document.getElementById('gameContainer');
-            const newSize = Math.min(container.clientWidth, 500);
-            canvas.width = newSize;
-            canvas.height = newSize;
-
-            if (core) {
-                core.x = canvas.width / 2;
-                core.y = canvas.height / 2;
-            }
-        }
-
-        function loadLevel() {
-            echoes = [];
-            pulses = [];
-            game.timeLeft = game.timeLimit + (game.level - 1) * 5;
-
-            const numEchoes = 10 + game.level * 2;
-
-            for (let i = 0; i < numEchoes; i++) {
-                let x, y;
-                do {
-                    x = Math.random() * (canvas.width - 60) + 30;
-                    y = Math.random() * (canvas.height - 60) + 30;
-                } while (Math.hypot(x - core.x, y - core.y) < 100);
-
-                echoes.push(new Echo(x, y));
-            }
-
-            levelDisplay.textContent = `שלב: ${game.level}`;
-            updateUI();
-        }
-
-        function checkBeamHit() {
-            const cos = Math.cos(core.angle);
-            const sin = Math.sin(core.angle);
-
-            for (let i = echoes.length - 1; i >= 0; i--) {
-                const echo = echoes[i];
-                const dx = echo.x - core.x;
-                const dy = echo.y - core.y;
-                const projectedDistance = dx * cos + dy * sin;
-                const perpendicularDistance = dx * sin - dy * cos;
-
-                if (Math.abs(perpendicularDistance) < echo.radius) {
-                    if (projectedDistance > 0 && projectedDistance < canvas.width) {
-                        if (echo.colorKey === core.colorKey) {
-                            game.score += 10 + game.level * 2;
-                            pulses.push(new Pulse(echo.x, echo.y, core.colorKey));
-                            echo.isAlive = false;
-                            echoes.splice(i, 1);
-                            if (echoes.length === 0) {
-                                nextLevel();
-                            }
-                            break;
-                        }
+                update() {
+                    this.currentRadius += this.speed;
+                    if (this.currentRadius > this.maxRadius) {
+                        this.isAlive = false;
                     }
                 }
             }
-        }
 
-        function checkPulseEffect() {
-            for (let i = pulses.length - 1; i >= 0; i--) {
-                const pulse = pulses[i];
-                if (!pulse.isAlive) continue;
-
-                for (let j = 0; j < echoes.length; j++) {
-                    const echo = echoes[j];
-                    const dx = pulse.x - echo.x;
-                    const dy = pulse.y - echo.y;
-                    const distance = Math.hypot(dx, dy);
-
-                    if (pulse.currentRadius > distance && pulse.currentRadius - pulse.speed <= distance) {
-                        if (echo.colorKey !== core.colorKey) {
-                            echo.convertColor(core.colorKey);
-                            game.score += 1;
-                        }
+            // --- core logic / utilities ---
+            function safeCancelAnimation() {
+                try {
+                    if (game.animationFrameId) {
+                        cancelAnimationFrame(game.animationFrameId);
+                        game.animationFrameId = null;
                     }
+                } catch (e) { console.warn('[Chromatic Echoes] cancelAnimationFrame failed', e); }
+            }
+
+            function resizeCanvas() {
+                const container = document.getElementById('gameContainer');
+                if (!container) return;
+                const newSize = Math.min(container.clientWidth, 500);
+                canvas.width = newSize;
+                canvas.height = newSize;
+                if (core) {
+                    core.x = canvas.width / 2;
+                    core.y = canvas.height / 2;
                 }
             }
-        }
 
-        function nextLevel() {
-            game.level++;
-            saveProgress();
-            showMessage('שלב הושלם!', `עברת לשלב ${game.level}! הניקוד נשמר.`, 'המשך לשלב הבא', startGameAfterLoad);
-        }
-
-        function gameOver() {
-            game.active = false;
-            clearInterval(game.timerIntervalId);
-            saveProgress();
-            showMessage('המשחק נגמר!', `הניקוד הסופי שלך: ${game.score}.`, 'התחל משחק חדש', resetAndStartNewGame);
-        }
-
-        function resetAndStartNewGame() {
-            initGameState(0, 1);
-            loadLevel();
-            startGameAfterLoad();
-        }
-
-        function update() {
-            if (!game.active) return;
-
-            const now = Date.now();
-            const deltaTime = Math.min(now - game.lastUpdateTime, 100);
-
-            core.update();
-            echoes.forEach(e => e.update(deltaTime));
-            pulses.forEach(p => p.update());
-
-            checkBeamHit();
-            checkPulseEffect();
-
-            pulses = pulses.filter(p => p.isAlive);
-            echoes = echoes.filter(e => e.isAlive);
-
-            game.lastUpdateTime = now;
-        }
-
-        function draw() {
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            pulses.forEach(p => p.draw());
-            echoes.forEach(e => e.draw());
-            core.draw();
-        }
-
-        function gameLoop() {
-            game.animationFrameId = requestAnimationFrame(gameLoop);
-            update();
-            draw();
-        }
-
-        function updateUI() {
-            scoreDisplay.textContent = `ניקוד: ${game.score}`;
-            timerDisplay.textContent = `זמן: ${Math.max(0, game.timeLeft)}`;
-        }
-
-        function startTimer() {
-            if (game.timerIntervalId) clearInterval(game.timerIntervalId);
-            game.timerIntervalId = setInterval(() => {
-                if (!game.active) {
-                    clearInterval(game.timerIntervalId);
-                    return;
+            function loadLevel() {
+                echoes = [];
+                pulses = [];
+                game.timeLimit = DEFAULT_TIME_LIMIT + (game.level - 1) * 5;
+                game.timeLeft = game.timeLimit;
+                const numEchoes = Math.max(4, 10 + game.level * 2);
+                for (let i = 0; i < numEchoes; i++) {
+                    let x, y, tries = 0;
+                    do {
+                        x = Math.random() * (canvas.width - 60) + 30;
+                        y = Math.random() * (canvas.height - 60) + 30;
+                        tries++;
+                        if (tries > 100) break;
+                    } while (Math.hypot(x - core.x, y - core.y) < 100);
+                    echoes.push(new Echo(x, y));
                 }
-                game.timeLeft--;
+                levelDisplay.textContent = `שלב: ${game.level}`;
                 updateUI();
+            }
 
-                if (game.timeLeft <= 0) {
-                    gameOver();
+            function checkBeamHit() {
+                const cos = Math.cos(core.angle);
+                const sin = Math.sin(core.angle);
+                for (let i = echoes.length - 1; i >= 0; i--) {
+                    const echo = echoes[i];
+                    const dx = echo.x - core.x;
+                    const dy = echo.y - core.y;
+                    const projectedDistance = dx * cos + dy * sin;
+                    const perpendicularDistance = dx * sin - dy * cos;
+                    if (Math.abs(perpendicularDistance) < echo.radius) {
+                        if (projectedDistance > 0 && projectedDistance < Math.max(canvas.width, canvas.height)) {
+                            if (echo.colorKey === core.colorKey) {
+                                game.score += 10 + game.level * 2;
+                                pulses.push(new Pulse(echo.x, echo.y, core.colorKey));
+                                echo.isAlive = false;
+                                echoes.splice(i, 1);
+                                if (echoes.length === 0) {
+                                    nextLevel();
+                                }
+                                break;
+                            }
+                        }
+                    }
                 }
-            }, 1000);
-        }
-
-        function showMessage(title, text, buttonText, action) {
-            if (game.animationFrameId) {
-                cancelAnimationFrame(game.animationFrameId);
-                game.animationFrameId = null;
-            }
-            if (game.timerIntervalId) {
-                clearInterval(game.timerIntervalId);
-                game.timerIntervalId = null;
             }
 
-            messageTitle.textContent = title;
-            messageTitle.style.color = (title === 'המשחק נגמר!') ? COLORS.R.hex : COLORS.G.hex;
-            messageText.textContent = text;
-            startButton.textContent = buttonText;
+            function checkPulseEffect() {
+                for (let i = pulses.length - 1; i >= 0; i--) {
+                    const pulse = pulses[i];
+                    if (!pulse.isAlive) continue;
+                    for (let j = 0; j < echoes.length; j++) {
+                        const echo = echoes[j];
+                        const dx = pulse.x - echo.x;
+                        const dy = pulse.y - echo.y;
+                        const distance = Math.hypot(dx, dy);
+                        if (pulse.currentRadius > distance && pulse.currentRadius - pulse.speed <= distance) {
+                            if (echo.colorKey !== core.colorKey) {
+                                echo.convertColor(core.colorKey);
+                                game.score += 1;
+                            }
+                        }
+                    }
+                }
+            }
 
-            startButton.onclick = () => {
+            function nextLevel() {
+                game.level++;
+                showMessage('שלב הושלם!', `עברת לשלב ${game.level}!`, 'המשך לשלב הבא', startGame);
+            }
+
+            function gameOver() {
+                game.active = false;
+                if (game.timerIntervalId) clearInterval(game.timerIntervalId);
+                showMessage('המשחק נגמר!', `הניקוד הסופי שלך: ${game.score}.`, 'התחל משחק חדש', resetAndStartNewGame);
+            }
+
+            function resetAndStartNewGame() {
+                initGameState(0, 1);
+                startGame();
+            }
+
+            function update() {
+                if (!game.active) return;
+                const now = Date.now();
+                const deltaTime = Math.min(now - game.lastUpdateTime, 100);
+                core.update();
+                echoes.forEach(e => e.update(deltaTime));
+                pulses.forEach(p => p.update());
+                checkBeamHit();
+                checkPulseEffect();
+                pulses = pulses.filter(p => p.isAlive);
+                echoes = echoes.filter(e => e.isAlive);
+                game.lastUpdateTime = now;
+            }
+
+            function draw() {
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                pulses.forEach(p => p.draw());
+                echoes.forEach(e => e.draw());
+                core.draw();
+            }
+
+            function gameLoop() {
+                safeCancelAnimation();
+                game.animationFrameId = requestAnimationFrame(gameLoop);
+                update();
+                draw();
+            }
+
+            function updateUI() {
+                if (scoreDisplay) scoreDisplay.textContent = `ניקוד: ${game.score}`;
+                if (timerDisplay) timerDisplay.textContent = `זמן: ${Math.max(0, game.timeLeft)}`;
+            }
+
+            function startTimer() {
+                if (game.timerIntervalId) clearInterval(game.timerIntervalId);
+                game.timerIntervalId = setInterval(() => {
+                    if (!game.active) {
+                        clearInterval(game.timerIntervalId);
+                        return;
+                    }
+                    game.timeLeft--;
+                    updateUI();
+                    if (game.timeLeft <= 0) {
+                        gameOver();
+                    }
+                }, 1000);
+            }
+
+            function showMessage(title, text, buttonText, action) {
+                safeCancelAnimation();
+                if (game.timerIntervalId) {
+                    clearInterval(game.timerIntervalId);
+                    game.timerIntervalId = null;
+                }
+                messageTitle.textContent = title || '';
+                messageTitle.style.color = (title === 'המשחק נגמר!') ? COLORS.R.hex : COLORS.G.hex;
+                messageText.textContent = text || '';
+                startButton.textContent = buttonText || 'המשך';
+                currentAction = typeof action === 'function' ? action : null;
+                startButton.disabled = false;
+                messageScreen.style.display = 'flex';
+                messageScreen.setAttribute('aria-hidden', 'false');
+                try { startButton.focus(); } catch (e) {}
+                console.log(`[Chromatic Echoes] showMessage: ${title} - action set: ${!!currentAction}`);
+            }
+
+            startButton.addEventListener('click', (e) => {
+                e.preventDefault();
                 messageScreen.style.display = 'none';
-                action();
-            };
-
-            messageScreen.style.display = 'flex';
-        }
-
-        function handleInput(event) {
-            if (!game.active || !core) return;
-            event.preventDefault();
-            core.changeColor();
-        }
-
-        function initGameState(score, level) {
-            if (game.animationFrameId) cancelAnimationFrame(game.animationFrameId);
-            if (game.timerIntervalId) clearInterval(game.timerIntervalId);
-            game.active = false;
-
-            resizeCanvas();
-            game.score = score;
-            game.level = level;
-            core = new Core();
-            core.updateDisplay();
-            updateUI();
-            draw();
-        }
-
-        function startGameAfterLoad() {
-            loadLevel();
-            game.active = true;
-            game.lastUpdateTime = Date.now();
-
-            startTimer();
-            gameLoop();
-        }
-
-        // --- אירועים ---
-        window.addEventListener('resize', resizeCanvas);
-        canvas.addEventListener('click', handleInput);
-        canvas.addEventListener('touchstart', handleInput, { passive: false });
-        document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && game.active) {
-                handleInput(e);
-            }
-        });
-
-        // הפעלה ראשונית - גרסה ללא Firebase
-        window.onload = function() {
-            resizeCanvas();
-            // יוצר מזהה משתמש מקומי אם צריך
-            try {
-                if (!localStorage.getItem('chromatic-echoes-user-id')) {
-                    localStorage.setItem('chromatic-echoes-user-id', crypto.randomUUID());
+                messageScreen.setAttribute('aria-hidden', 'true');
+                if (currentAction) {
+                    console.log('[Chromatic Echoes] startButton clicked -> invoking currentAction');
+                    try { currentAction(); } catch (err) { console.error('[Chromatic Echoes] action error', err); }
+                } else {
+                    console.log('[Chromatic Echoes] startButton clicked but no action assigned');
                 }
-                userIdDisplay.textContent = 'משתמש מקומי: ' + localStorage.getItem('chromatic-echoes-user-id');
-            } catch (e) {
-                userIdDisplay.textContent = 'משתמש מקומי';
+            });
+
+            function handleInput(event) {
+                if (!game.active || !core) return;
+                event.preventDefault();
+                core.changeColor();
             }
 
-            // טען התקדמות מקומית והראה מסך התחלתי
-            loadProgress();
-        };
+            function initGameState(score, level) {
+                if (game.animationFrameId) cancelAnimationFrame(game.animationFrameId);
+                if (game.timerIntervalId) clearInterval(game.timerIntervalId);
+                game.active = false;
+                resizeCanvas();
+                game.score = Number.isFinite(score) ? score : 0;
+                game.level = Number.isFinite(level) ? level : 1;
+                core = new Core();
+                core.updateDisplay();
+                updateUI();
+                draw();
+                console.log('[Chromatic Echoes] initGameState', { score: game.score, level: game.level });
+            }
 
+            function startGame() {
+                try {
+                    loadLevel();
+                    game.active = true;
+                    game.lastUpdateTime = Date.now();
+                    startTimer();
+                    gameLoop();
+                    console.log('[Chromatic Echoes] game started');
+                } catch (e) {
+                    console.error('[Chromatic Echoes] startGame failed', e);
+                    showMessage('שגיאה', 'לא ניתן להתחיל את המשחק. בדוק קונסול.', 'אוק', () => {});
+                }
+            }
+
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+            });
+
+            canvas.addEventListener('click', handleInput);
+            canvas.addEventListener('touchstart', handleInput, { passive: false });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' && game.active) {
+                    handleInput(e);
+                }
+            });
+
+            window.addEventListener('load', () => {
+                console.log('[Chromatic Echoes] window.load');
+                resizeCanvas();
+                initGameState(0, 1);
+                showMessage('ברוך הבא', 'לחץ על הכפתור כדי להתחיל משחק חדש.', 'התחל', startGame);
+            });
+
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                setTimeout(() => {
+                    if (!game || !core) {
+                        console.log('[Chromatic Echoes] document ready (fallback init)');
+                        resizeCanvas();
+                        initGameState(0, 1);
+                        showMessage('ברוך הבא', 'לחץ על הכפתור כדי להתחיל משחק חדש.', 'התחל', startGame);
+                    }
+                }, 50);
+            }
+
+            console.log('[Chromatic Echoes] script loaded successfully');
+        })();
     </script>
 </body>
 </html>
